@@ -1,58 +1,58 @@
 # Google Search Crawler 🚀
 
-Một công cụ mạnh mẽ, được xây dựng trên nền tảng **Crawlee** và **Playwright**, chuyên dụng để thu thập dữ liệu từ kết quả tìm kiếm Google với các cơ chế chống chặn (anti-bot) nâng cao.
+A high-performance search engine scraping tool built on **Crawlee** and **Playwright**, designed for automated data extraction with advanced anti-bot detection and proxy management.
 
-## 🌟 Tính năng nổi bật
+## 🌟 Key Features
 
-- **Chống chặn thông minh**: Tích hợp xoay tua Proxy (Proxy Rotation) và giả lập trình duyệt Playwright để vượt qua các rào cản từ Google.
-- **Tùy biến cao**: Kiểm soát tốt các tham số tìm kiếm, dải ngày (date range) và số lượng trang kết quả.
-- **Tự động chia nhỏ truy vấn**: Hỗ trợ split dải ngày để tìm kiếm sâu hơn, tránh bị giới hạn kết quả từ Google.
-- **Xử lý dữ liệu trùng lặp**: Tích hợp cơ chế Deduplication để đảm bảo dữ liệu thu thập không bị lặp lại giữa các lần chạy.
-- **Đa nền tảng**: Tối ưu hóa việc tìm kiếm các liên kết từ mạng xã hội (Facebook, Instagram, X/Twitter).
-- **Xuất dữ liệu**: Kết quả được lưu dưới dạng JSON có cấu trúc, phân loại theo từng nền tảng và dải ngày.
+- **Smart Anti-Bot Bypass**: Integrated Proxy Rotation and Playwright browser fingerprinting to minimize detection.
+- **Granular Search Control**: Precise control over search queries, date ranges, and pagination.
+- **Intelligent Query Splitting**: Automatically splits date ranges into manageable chunks to maximize result density.
+- **Cross-Run Deduplication**: Persistent deduplication mechanism ensuring unique results across multiple executions.
+- **Multi-Platform Focus**: Optimized for extracting social media footprints from Facebook, Instagram, and X (Twitter).
+- **Professional Export**: Structures data into clean **JSON** and office-ready **Excel (.xlsx)** formats.
 
-## 🛠️ Yêu cầu hệ thống
+## 🛠️ Prerequisites
 
-- **Node.js**: Phiên bản 20 trở lên.
-- **Trình duyệt**: Tự động cài đặt thông qua Playwright.
-- **Proxy**: Khuyên dùng danh sách Proxy tĩnh hoặc Proxy xoay tua để đảm bảo độ ổn định cao nhất.
+- **Node.js**: Version 20 or higher.
+- **Chromium**: Automatically managed via Playwright.
+- **Proxy**: Recommended to use static or rotating proxy providers for high-volume scraping.
 
-## 🚀 Cài đặt
+## 🚀 Installation
 
-1. **Clone dự án**:
+1. **Clone the repository**:
    ```bash
    git clone https://github.com/YOUR_USER/google-search.git
    cd google-search
    ```
 
-2. **Cài đặt thư viện**:
+2. **Install dependencies**:
    ```bash
    npm install
    ```
 
-3. **Cài đặt trình duyệt Playwright**:
+3. **Install Playwright browsers**:
    ```bash
    npx playwright install chromium
    ```
 
-## ⚙️ Cấu hình
+## ⚙️ Configuration
 
-Tạo file `.env` từ file mẫu `.env.example`:
+Copy the example environment file and update it with your credentials:
 
 ```bash
 cp .env.example .env
 ```
 
-Cập nhật các thông số cần thiết trong `.env`:
+## 🏃 Usage
 
-
-## 🏃 Sử dụng
-
-Chạy crawler:
+Launch the crawler using the following command:
 
 ```bash
 npm start
 ```
 
-Kết quả sẽ được lưu trong thư mục `results/` dưới dạng các file JSON.
+Results will be generated in the `results/` directory in both JSON and XLSX formats.
 
+## ⚖️ License
+
+This project is licensed under the [MIT License](LICENSE). Please use this tool responsibly and in compliance with Google's Terms of Service.
