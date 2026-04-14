@@ -21,14 +21,15 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "crawlee": "^3.16.0",
+    "crawlee": "^3.10.1",
     "dotenv": "^17.4.2",
-    "playwright": "^1.59.1",
-    "xlsx": "^0.18.5"
+    "pg": "^8.20.0",
+    "playwright": "^1.59.1"
   },
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^25.6.0",
+    "@types/pg": "^8.20.0",
     "@typescript-eslint/eslint-plugin": "^8.58.2",
     "@typescript-eslint/parser": "^8.58.2",
     "eslint": "^10.2.0",

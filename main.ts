@@ -1,103 +1,81 @@
 import { buildQueries } from './src/query_builder';
-import { runGoogleCrawler } from './src/crawler';
-import { Deduplicator } from './src/dedup';
+import { runGoogleCrawler, SearchResult } from './src/crawler';
+import {
+  loadPlatformCache,
+  resolvePlatformId,
+  getOrCreateKeyword,
+  extractPostId,
+  insertPosts,
+  closeDb,
+} from './src/db';
 import { log } from 'crawlee';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as XLSX from 'xlsx';
 
 import 'dotenv/config';
 
 const SEARCH_CONFIG = {
-    sites: process.env.SEARCH_SITES ? process.env.SEARCH_SITES.split(',').map((s) => s.trim()) : [],
-    keyword: process.env.SEARCH_KEYWORD || '',
-    dateFrom: process.env.SEARCH_DATE_FROM || '',
-    dateTo: process.env.SEARCH_DATE_TO || '',
-    splitDays: parseInt(process.env.SEARCH_SPLIT_DAYS || '4', 10),
-    maxPages: parseInt(process.env.SEARCH_MAX_PAGES || '10000', 10),
+  sites: process.env.SEARCH_SITES ? process.env.SEARCH_SITES.split(',').map((s) => s.trim()) : [],
+  keyword: process.env.SEARCH_KEYWORD || '',
+  dateFrom: process.env.SEARCH_DATE_FROM || '',
+  dateTo: process.env.SEARCH_DATE_TO || '',
+  splitDays: parseInt(process.env.SEARCH_SPLIT_DAYS || '4', 10),
+  maxPages: parseInt(process.env.SEARCH_MAX_PAGES || '10000', 10),
 };
 
 async function main() {
-    log.setLevel(log.LEVELS.INFO);
-    const { sites, keyword, dateFrom, dateTo, splitDays, maxPages } = SEARCH_CONFIG;
+  log.setLevel(log.LEVELS.INFO);
+  const { sites, keyword, dateFrom, dateTo, splitDays, maxPages } = SEARCH_CONFIG;
 
-    if (!sites.length || !keyword || !dateFrom || !dateTo) {
-        log.error('Thiếu thông số tìm kiếm trong file config');
-        process.exit(1);
-    }
+  if (!sites.length || !keyword || !dateFrom || !dateTo) {
+    log.error('Thiếu thông số tìm kiếm trong file config');
+    process.exit(1);
+  }
 
-    const queriesData = buildQueries(sites, keyword, dateFrom, dateTo, splitDays);
-    const resultsMap = await runGoogleCrawler(
-        queriesData.map((q) => q.query),
-        maxPages,
-    );
+  // ── 1. Init DB ──
+  await loadPlatformCache();
+  const keywordId = await getOrCreateKeyword(keyword);
+  log.info(`Keyword "${keyword}" → keyword_id = ${keywordId}`);
 
-    const dedup = new Deduplicator();
-    const resultsDir = path.join(__dirname, 'results');
-    if (!fs.existsSync(resultsDir)) fs.mkdirSync(resultsDir);
-    dedup.loadFromResultsSync(resultsDir);
+  // ── 2. Build queries + mapping query → site domain ──
+  const queriesData = buildQueries(sites, keyword, dateFrom, dateTo, splitDays);
 
-    const resultsBySite: Record<string, any[]> = {};
+  // Map: query string → site domain (để callback biết URL thuộc platform nào)
+  const queryToSite = new Map<string, string>();
+  for (const qd of queriesData) {
+    queryToSite.set(qd.query, qd.site);
+  }
 
-    for (const qd of queriesData) {
-        const resList = resultsMap[qd.query] || [];
-        const uniqueList = resList
-            .filter((item) => {
-                if (!dedup.isDuplicate(item.url)) {
-                    dedup.add(item.url);
-                    return true;
-                }
-                return false;
-            })
-            .map((item) => ({
-                ...item,
-                part: qd.weekLabel,
-                dateFrom: qd.dateFrom,
-                dateTo: qd.dateTo,
-            }));
+  // ── 3. Crawl + push ngay vào DB qua callback ──
+  const stats = await runGoogleCrawler({
+    queries: queriesData.map((q) => q.query),
+    maxPages,
+    onResults: async (results: SearchResult[], query: string): Promise<number> => {
+      const site = queryToSite.get(query);
+      if (!site) {
+        log.warning(`Unknown query mapping: ${query}`);
+        return 0;
+      }
 
-        if (uniqueList.length > 0) {
-            if (!resultsBySite[qd.site]) resultsBySite[qd.site] = [];
-            resultsBySite[qd.site].push(...uniqueList);
-        }
-    }
+      const platformId = resolvePlatformId(site);
 
-    // Lưu file
-    for (const site of Object.keys(resultsBySite)) {
-        const resList = resultsBySite[site];
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const safeSite = site.replace('.', '_');
+      const posts = results.map((item) => ({
+        postId: extractPostId(item.url, site),
+        url: item.url,
+      }));
 
-        // 1. Lưu JSON
-        const jsonFile = path.join(resultsDir, `${safeSite}_${timestamp}.json`);
-        fs.writeFileSync(
-            jsonFile,
-            JSON.stringify(
-                {
-                    site,
-                    keyword,
-                    total: resList.length,
-                    data: resList,
-                },
-                null,
-                2,
-            ),
-        );
+      return insertPosts(posts, platformId, keywordId);
+    },
+  });
 
-        // 2. Lưu Excel (XLSX)
-        const excelFile = path.join(resultsDir, `${safeSite}_${timestamp}.xlsx`);
-        const worksheet = XLSX.utils.json_to_sheet(resList);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Results');
-        XLSX.writeFile(workbook, excelFile);
+  log.info(
+    `Hoàn thành! Found: ${stats.totalFound}, Inserted: ${stats.totalInserted}, Duplicates: ${stats.totalDuplicates}`,
+  );
 
-        log.info(`✅ Đã lưu ${resList.length} kết quả vào ${jsonFile} và .xlsx`);
-    }
-
-    log.info('🚀 Hoàn thành crawl dữ liệu!');
+  // ── 4. Cleanup ──
+  await closeDb();
 }
 
-main().catch((e) => {
-    log.error(`Unhandled error: ${e}`);
-    process.exit(1);
+main().catch(async (e) => {
+  log.error(`Unhandled error: ${e}`);
+  await closeDb().catch(() => {});
+  process.exit(1);
 });
