@@ -1,0 +1,9 @@
+node_modules/
+dist/
+results/*
+!results/.gitkeep
+.env
+.env.example
+*.log
+debug_*.png
+.DS_Store
