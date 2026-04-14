@@ -63,78 +63,77 @@ export async function getOrCreateKeyword(keyword: string): Promise<number> {
 
 // ─── Post ID extraction ────────────────────────────────────
 
-import * as crypto from 'crypto';
-
 /**
  * Extract post ID gốc từ URL theo platform.
- * Prefix platform (fb_, ig_, x_) để tránh collision cross-platform.
+ * Trả về null nếu URL không phải bài post hợp lệ → sẽ bị bỏ qua, không insert vào DB.
  *
- * Facebook: post ID luôn là chuỗi số dài (>=10 digits) ở cuối URL path.
- *   /page/posts/text-slug/1236060595371522/  → 1236060595371522
- *   /groups/341951053297626/posts/2284945865664792/ → 2284945865664792
- *   /page/photos/hash/1550488673747557/      → 1550488673747557
- *   /page/videos/text/1729623328411351/      → 1729623328411351
- *   /story.php?story_fbid=123456&id=789      → 123456
- *   /watch/?v=123456                         → 123456
- *   /photo.php?fbid=123456                   → 123456
- *   Ngoại lệ: pfbid... (obfuscated ID)      → giữ nguyên
+ * Facebook: post ID là chuỗi số >= 10 digits ở cuối URL path.
+ *   /page/posts/text-slug/1236060595371522/  → "1236060595371522"
+ *   /groups/341951053297626/posts/2284945865664792/ → "2284945865664792"
+ *   /page/photos/hash/1550488673747557/      → "1550488673747557"
+ *   /page/videos/text/1729623328411351/      → "1729623328411351"
+ *   /story.php?story_fbid=123456             → "123456"
+ *   /watch/?v=123456                         → "123456"
+ *   /photo.php?fbid=123456                   → "123456"
+ *   pfbid... (obfuscated ID)                 → "pfbid..."
+ *   /?locale=fo_FO (page URL, không phải post) → null
  *
  * Instagram: shortcode sau /p/, /reel/, /tv/
- *   /p/CxYz123AbCd/   → CxYz123AbCd
- *   /reel/CxYz123AbCd/ → CxYz123AbCd
+ *   /p/CxYz123AbCd/    → "CxYz123AbCd"
+ *   /reel/CxYz123AbCd/ → "CxYz123AbCd"
+ *   /username/ (profile) → null
  *
  * X/Twitter: tweet ID (số) sau /status/
- *   /user/status/1234567890123456789 → 1234567890123456789
- *
- * Fallback: SHA-256 hash của URL
+ *   /user/status/1234567890123456789 → "1234567890123456789"
+ *   /home, /explore (không phải tweet) → null
  */
-export function extractPostId(url: string, domain: string): string {
+export function extractPostId(url: string, domain: string): string | null {
   try {
     const u = new URL(url);
 
     if (domain === 'facebook.com') {
-      // Query params có ưu tiên cao (story_fbid, v, fbid)
+      // Query params (story_fbid, v, fbid)
       const storyFbid = u.searchParams.get('story_fbid');
-      if (storyFbid) return `fb_${storyFbid}`;
+      if (storyFbid) return storyFbid;
 
       const watchV = u.searchParams.get('v');
-      if (watchV) return `fb_${watchV}`;
+      if (watchV) return watchV;
 
       const fbid = u.searchParams.get('fbid');
-      if (fbid) return `fb_${fbid}`;
+      if (fbid) return fbid;
 
-      // Path: tìm pfbid (obfuscated ID, xuất hiện ở bất kỳ đâu trong path)
+      // pfbid (obfuscated ID)
       const pfbidMatch = u.pathname.match(/(pfbid[a-zA-Z0-9]+)/);
-      if (pfbidMatch) return `fb_${pfbidMatch[1]}`;
+      if (pfbidMatch) return pfbidMatch[1];
 
-      // Path: lấy chuỗi số >= 10 digits cuối cùng trong path
-      // Đây là post ID thật — luôn nằm ở cuối URL
+      // Số >= 10 digits ở cuối path = post ID thật
       const segments = u.pathname.split('/').filter(Boolean);
       for (let i = segments.length - 1; i >= 0; i--) {
         if (/^\d{10,}$/.test(segments[i])) {
-          return `fb_${segments[i]}`;
+          return segments[i];
         }
       }
+
+      // Không tìm được ID → URL không phải bài post
+      return null;
     }
 
     if (domain === 'instagram.com') {
-      // /p/CxYz123AbCd/ hoặc /reel/CxYz123AbCd/ hoặc /tv/CxYz123AbCd/
       const igMatch = u.pathname.match(/\/(p|reel|tv)\/([^/?]+)/);
-      if (igMatch) return `ig_${igMatch[2]}`;
+      if (igMatch) return igMatch[2];
+      return null;
     }
 
     if (domain === 'x.com') {
-      // /user/status/1234567890123456789
       const xMatch = u.pathname.match(/\/status\/(\d+)/);
-      if (xMatch) return `x_${xMatch[1]}`;
+      if (xMatch) return xMatch[1];
+      return null;
     }
   } catch {
-    // URL parse fail → fallback below
+    // URL parse fail
   }
 
-  // Fallback: SHA-256 hash (collision-safe, deterministic)
-  const hash = crypto.createHash('sha256').update(url).digest('hex').slice(0, 16);
-  return `hash_${hash}`;
+  return null;
 }
 
 // ─── Bulk Insert Posts ─────────────────────────────────────

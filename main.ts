@@ -57,10 +57,18 @@ async function main() {
 
       const platformId = resolvePlatformId(site);
 
-      const posts = results.map((item) => ({
-        postId: extractPostId(item.url, site),
-        url: item.url,
-      }));
+      // Filter bỏ URL không có post ID hợp lệ (page URL, profile URL...)
+      const posts = results
+        .map((item) => {
+          const postId = extractPostId(item.url, site);
+          return postId ? { postId, url: item.url } : null;
+        })
+        .filter((p): p is { postId: string; url: string } => p !== null);
+
+      const skipped = results.length - posts.length;
+      if (skipped > 0) {
+        log.info(`[${site}] Skipped ${skipped} invalid URLs (no post ID)`);
+      }
 
       return insertPosts(posts, platformId, keywordId);
     },
