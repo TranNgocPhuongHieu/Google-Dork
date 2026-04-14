@@ -40,7 +40,17 @@ export function resolvePlatformId(domain: string): number {
 
 /** Upsert keyword, trả về keyword_id */
 export async function getOrCreateKeyword(keyword: string): Promise<number> {
-  // Thử INSERT trước
+  // SELECT trước để tránh PostgreSQL tự động tăng SEQUENCE (SERIAL) khi gặp lỗi UNIQUE
+  const selectResult = await pool.query<{ keyword_id: number }>(
+    'SELECT keyword_id FROM dim_keyword WHERE keyword = $1',
+    [keyword],
+  );
+
+  if (selectResult.rows.length > 0) {
+    return selectResult.rows[0].keyword_id;
+  }
+
+  // Nếu chưa có thì INSERT
   const insertResult = await pool.query<{ keyword_id: number }>(
     `INSERT INTO dim_keyword (keyword)
      VALUES ($1)
@@ -53,12 +63,12 @@ export async function getOrCreateKeyword(keyword: string): Promise<number> {
     return insertResult.rows[0].keyword_id;
   }
 
-  // Đã tồn tại → SELECT
-  const selectResult = await pool.query<{ keyword_id: number }>(
+  // Fallback trường hợp race condition (2 process cùng INSERT một lúc)
+  const finalSelect = await pool.query<{ keyword_id: number }>(
     'SELECT keyword_id FROM dim_keyword WHERE keyword = $1',
     [keyword],
   );
-  return selectResult.rows[0].keyword_id;
+  return finalSelect.rows[0].keyword_id;
 }
 
 // ─── Post ID extraction ────────────────────────────────────
